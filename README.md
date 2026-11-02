@@ -15,45 +15,53 @@ into two types.
    CDAS (Bao et al., 2026), representation finetuning (Wu et al., 2024), and steering
    vectors trained by preference optimisation (Cao et al., 2024).
 
-Each type has its own weaknesses:
+Both have limitations:
 
 - *Observational methods* are simple, needing only forward passes and a regression, but
   a direction that detects a concept well need not steer the model well. On AxBench (Wu
-  et al., 2025), linear probes rank second of twelve methods at concept detection (AUROC
-  0.940) but eleventh at steering, with less than half the score of a difference of
-  means. Li et al. (2023) and Marks and Tegmark (2024) also find that probe weight
-  vectors steer less well than mean differences.
-- *Interventional methods* target the causal effect of H on B directly, but require
-  gradient-based optimisation with its own hyperparameters, often paired counterfactual
-  prompts, and a differentiable objective. The last requirement rules them out when
-  behaviour is scored by a judge model, read from sampled text, or observed only as a
-  binary outcome.
+  et al., 2025), linear probes rank second of twelve methods at concept detection but
+  eleventh at steering, and Li et al. (2023) and Marks and Tegmark (2024) also find that
+  probe weight vectors steer less well than mean differences.
+- *Interventional methods* target the effect of H on B directly, but add complexity:
+  gradient-based optimisation through the model with its own hyperparameters, and often
+  paired counterfactual prompts or example outputs. Non-differentiable behaviour, such
+  as a judge score or a binary outcome, also requires policy gradients and sampled
+  rollouts (Sinii et al., 2025; Poupart et al., 2026).
+
+Our aim is to target the effect of H on B while keeping as much of the simplicity of
+the observational setting as possible.
 
 ## A simple identification strategy via instrumental variables
 
-We conjecture that probes steer poorly for two reasons. First, they are usually fit to a
-concept defined by the input (such as the correct answer), rather than to the model's
-behaviour (the answer it actually gives). Second, even a probe fit to behaviour
-estimates the effect of H on B from observational data, and so is confounded by the
-input and by activations at earlier token positions.
+We conjecture that probes steer poorly mainly because they do not identify the effect of
+H on B, for three reasons. First, they are usually fit to a concept of the input (such
+as the correct answer) rather than to the model's behaviour (the answer it actually
+gives). Second, even a probe fit to behaviour is estimated from observational data, and
+so is confounded by the input and by activations at earlier positions. Third, the
+activations barely vary in many of the directions the model responds to, so
+observational data say little about the effect in those directions (a failure of
+overlap).
 
-Motivated by this, we propose a simple way to identify the effect of H on B that keeps
-the simplicity of a probe. We add Gaussian noise to the activations and use the noise as
-an instrumental variable. The noise is
-independent of the input by construction and moves the activations in every direction,
-so it is a valid instrument, and two-stage least squares (2SLS) reduces to regressing
-behaviour on the noise. Like a probe, the method needs only forward passes and a
-least-squares fit, and it applies to any measure of behaviour, including binary
-outcomes. In initial experiments on Pythia-70m (Biderman et al., 2023), the resulting
+Motivated by this, we propose identifying the effect of H on B with an instrumental
+variable. We add Gaussian noise to the activations and use the noise as the instrument.
+The noise is independent of the input by construction and moves the activations in
+every direction, which addresses both confounding and lack of overlap, and two-stage
+least squares (2SLS) reduces to regressing behaviour on the noise. Like a probe, this
+only needs samples of behaviour and a linear regression, with no gradients or
+optimisation, and it applies to any measure of behaviour, including binary outcomes. In
+initial experiments on one task in Pythia-70m (Biderman et al., 2023), the resulting
 direction flips the model's answer about five times as often as a probe fit to the same
 binary label, at matched side effects.
 
-The estimator itself is not new. By Stein's lemma (Stein, 1981), regressing an output on
-Gaussian perturbations estimates the Gaussian-smoothed gradient, which is the quantity
-targeted by zeroth-order and evolution-strategy gradient estimators (Nesterov and
-Spokoiny, 2017; Salimans et al., 2017). The IV view explains why this estimator
-identifies the effect of the activations on behaviour while an observational probe does
-not.
+The estimator itself is not new: by Stein's lemma (Stein, 1981), regressing an output on
+Gaussian perturbations estimates the Gaussian-smoothed gradient, as in zeroth-order and
+evolution-strategy methods (Nesterov and Spokoiny, 2017; Salimans et al., 2017). What
+the IV view adds is an explanation of why it identifies the effect of H on B while a
+probe does not, and a common framework for noise and natural instruments such as the
+final token, which we find to be valid but too weak (result 5). When B is
+differentiable, the average gradient can be computed directly by backpropagation, which
+is cheaper, so the method is aimed at settings where it cannot. Our experiments use a
+differentiable B so that the gradient is available as a reference.
 
 ## Concept, behaviour and confounding
 
@@ -73,13 +81,13 @@ disagree on attraction errors ("The author that the guards *are*"), which make u
 
 ### Concept versus behaviour
 
-A direction fit to Z shows where the input's concept is encoded in the activations.
-However, the activations have no causal effect on Z, which is fixed by the input, so
-this direction does not estimate a causal effect. It steers well only to the extent that
-where the concept is encoded coincides with what later layers read. Our hypothesis is
-that mapping input concepts to activations can only take us so far, and that steering
-directions should be fit to behaviour. There is also no interventional version of the
-concept-based approach, since perturbing the activations cannot change Z.
+A direction fit to Z shows where the input's concept is encoded. Since the activations
+have no causal effect on Z, this direction does not estimate a causal effect, and it
+steers well only to the extent that where the concept is encoded coincides with what
+later layers read. Our hypothesis is that mapping input concepts to activations can only
+take us so far, and that steering directions should be fit to behaviour. Interventional
+methods such as DAS also use the concept, but only to define a target behaviour, so they
+still estimate an effect of H on B.
 
 ### Causal graph
 
@@ -125,56 +133,56 @@ bilinear in the activations and a vector of context features c(X),
 
 $$B = c(X)^\top A h + \varepsilon = c(X)^\top A_T h_T + c(X)^\top A_{\lt T} h_{\lt T} + \varepsilon.$$
 
-This is the simplest model in which the context interacts with the activations to
-produce behaviour. It is more realistic for a transformer than a model that is additive
-in h_T and h_(<T), since attention makes the way later layers read h_T depend on the
-earlier positions. At layer ℓ the input affects B only through h, so c(X) can be read as the context that
-later layers compute from the earlier positions (when B is judged with X, it also
-includes the judge's direct dependence on X). Under this model the effect of h_T on B
-varies with the input, β(X) = A_Tᵀc(X). A single steering vector targets the average
-effect
+This is the simplest model in which the context interacts with the activations. It is
+more realistic for a transformer than an additive model, since attention makes the way
+later layers read h_T depend on the earlier positions. Unless B is judged with X, the
+input affects B only through h, so c(X) can be read as the context that later layers
+compute from the earlier positions. The effect of h_T on B then varies with the input,
+β(X) = A_Tᵀc(X), and a single steering vector targets the average effect
 
 $$\bar\beta = \mathbb{E}[\beta(X)] = \mathbb{E}[\partial B/\partial h_T],$$
 
-which is the average gradient we use as a reference below. A probe regressing B on h_T
+which is the average gradient we use as a reference. A probe regressing B on h_T
 estimates
 
 $$\hat\beta_{\text{probe}} = \bar\beta + \Sigma_T^{-1}\mathrm{Cov}\big(h_T,\ (\beta(X) - \bar\beta)^\top h_T + c(X)^\top A_{\lt T} h_{\lt T}\big).$$
 
-The second term is the confounding bias, which has two parts. The first comes from
-effect heterogeneity: the effect of h_T varies with the input, and since both depend on
-X, this variation is correlated with h_T itself. This is the correlated random
-coefficient model from econometrics (Heckman and Vytlacil, 1998). The second part is the
-path through earlier positions. Along an eigendirection of Σ_T with variance λ, the bias
-can be as large as √(Var(U)/λ), where U is the second argument of the covariance, so it
-is largest in directions where h_T barely varies across inputs. With regularisation,
-these directions are instead shrunk towards zero. In either case, the probe cannot
-recover β̄ in directions where the data do not vary.
+The second term is the confounding bias. Its first part comes from effect heterogeneity:
+the effect of h_T varies with the input, and since both depend on X, this variation is
+correlated with h_T (the correlated random coefficient model in econometrics; Heckman
+and Vytlacil, 1998). Its second part is the path through earlier positions. Along an
+eigendirection of Σ_T with variance λ, the bias can be as large as √(Var(U)/λ), where U
+is the second argument of the covariance, so it is largest where h_T barely varies
+across inputs. Regularisation instead shrinks these directions towards zero, so either
+way the probe cannot recover β̄ where the data do not vary.
 
 An instrument removes this bias if it is independent of the confounders (exogeneity)
-and moves h_T in every direction (rank). Adding noise δ ~ N(0, s²I) to h_T satisfies
-both: δ is independent of X, h and ε by construction, and it is full rank. The first
-stage of 2SLS is then the identity, so
+and moves h_T in every direction (rank). Noise δ ~ N(0, s²I) added to h_T satisfies
+both by construction. The first stage of 2SLS is then the identity, so
 
 $$\hat\beta_{\text{IV}} = \Sigma_\delta^{-1}\mathrm{Cov}(\delta, B) = \Sigma_\delta^{-1}\mathbb{E}\big[\delta\delta^\top\beta(X)\big] = \bar\beta,$$
 
-where B is now measured with the noise added. Because δ is also independent of the
-coefficients β(X), 2SLS recovers their average (cf. Wooldridge, 1997).
-
-Outside this model, Stein's lemma shows that the same regression estimates the gradient
-of B averaged over the noise and the inputs, so s trades off locality against signal. If only
-the binary answer 1[B > 0] is observed, the regression is a linear probability model,
-and only perturbations that flip the answer carry information.
+where B is measured with the noise added. Since δ is also independent of the
+coefficients β(X), 2SLS recovers their average (cf. Wooldridge, 1997). Outside this
+model, by Stein's lemma the same regression estimates the gradient of B averaged over the
+noise and the inputs, so s trades off locality against signal. If only the binary answer
+1[B > 0] is observed, the regression is a linear probability model, and only
+perturbations that flip the answer carry information.
 
 ## Initial results
 
 ### Evaluation
 
-Train and test items use disjoint subject nouns. We use each direction to push held-out
-items towards the opposite of their current answer at a fixed norm (α times the mean
-‖h_T‖), and record how often the answer flips and the off-target KL divergence of the
-next-token distribution (excluding " is" and " are"). As a reference we use the average
-gradient E[∂B/∂h_T], computed by backpropagation.
+Train and test items use disjoint subject nouns. Each direction pushes held-out items
+towards the opposite of their current answer at a fixed norm (α times the mean ‖h_T‖),
+and we record how often the answer flips and the off-target KL divergence of the
+next-token distribution (excluding " is" and " are"). The reference is the average
+gradient E[∂B/∂h_T], computed by backpropagation. Results use a single train/test split
+(6,384 training and 1,616 held-out items) and a single noise seed; binomial standard
+errors on the flip rates are at most about 1.3 percentage points. All directions are
+evaluated on the is/are readout that the behaviour directions are fit to, which favours
+them; whether they transfer to other readouts of the same concept (e.g. was/were) is
+still to be tested.
 
 ### Results
 
@@ -182,7 +190,7 @@ gradient E[∂B/∂h_T], computed by backpropagation.
 where Pythia-70m gives the wrong verb, a probe on h_T at layer 4 still recovers the
 correct Z 97.6% of the time (124 errors). At layer 3, the probe on Z predicts Z almost
 perfectly (held-out log-loss 0.002), yet steers no better than a random direction (flip
-rate at α = 0.4 of 2.5%, against 1.8% for a random direction).
+rate 2.5% at α = 0.4, against 1.8%).
 
 **2. Observational directions do not recover the causal direction, whether fit to the
 concept or to behaviour.** Layer 4, cosine with the average gradient and steering on
@@ -201,13 +209,17 @@ items the model gets right:
 Fitting the probe to the model's own answer instead of the correct answer makes little
 difference, which is consistent with the behaviour probe also being confounded.
 
-**3. Confounding through earlier positions.** The probe on B agrees with the gradient at
-the last layer, where the path through earlier positions is absent, but not at earlier
-layers:
+**3. Consistent with confounding through earlier positions.** The probe on B agrees with
+the gradient at the last layer, where the path through earlier positions is absent, but
+not at earlier layers:
 
 | layer | 1 | 2 | 3 | 4 | 5 | 6 (last) |
 |---|---|---|---|---|---|---|
 | cos(probe on B, gradient) | 0.06 | 0.09 | 0.04 | 0.12 | 0.33 | 0.86 |
+
+At the last layer B is also close to linear in h_T, so this does not on its own separate
+confounding from nonlinearity. A probe on all positions at layer ℓ, which removes the
+path through earlier positions, would separate the two.
 
 **4. The model is sensitive in directions where the activations barely vary.** Share of
 the gradient's squared norm inside the subspace holding 90% of the variance of h_T:
@@ -243,28 +255,30 @@ At matched off-target KL (≈ 0.3), the binary noise IV flips 53% of answers, co
 the same pattern. With a binary outcome, the noise needs to be large enough to flip a
 reasonable share of answers (here 10–30%).
 
-## Open questions
+## Next steps
 
-- **Sample cost.** The regression has d unknowns, so the number of perturbations needed
-  grows with model width. The runs above use about 6,400 prompts with 4 antithetic
-  perturbation pairs each, for d = 512. We have not yet measured how steering quality
-  degrades with fewer perturbations, which is the main question for scaling to larger
-  models with judge-scored behaviour.
-- **Transfer.** Every direction is evaluated on the is/are readout that the behaviour
-  directions are fit to, which favours them. If concept directions transfer better to
-  other readouts of the same concept (was/were, has/have, generated text), that limits
-  the hypothesis.
-- **Earlier positions versus lack of variation.** A probe on all positions at layer ℓ
-  removes the path through earlier positions. If it still fails, the remaining problem
-  is lack of variation in h_T.
-- **Restricted noise.** Noise restricted to the principal subspace of the data is
-  exogenous but not full rank, and so should fail in the same way as the verb
-  instrument.
-- **Other explanations and baselines.** Park et al. (2026) attribute the gap between
-  probing and steering to geometry, and steer by mapping a probe direction through a
-  covariance matrix. We have not yet compared against this, or against interventional
-  methods such as CDAS and ReFT.
-- **Scale.** Larger models, semantic concepts and judge-scored behaviour.
+We see three main directions.
+
+1. **Non-differentiable behaviour.** The method is aimed at behaviour observed only as an
+   indicator (e.g. whether a generated answer is correct) or scored by a judge model.
+   The binary results above are a first step. Natural baselines are probes fit to the
+   same labels and policy-gradient steering (Poupart et al., 2026).
+2. **Larger models.** The regression has d unknowns, so the number of perturbations
+   needed grows with model width. The runs above use about 6,400 prompts with 4
+   antithetic pairs each, for d = 512. A learning curve of steering quality against the
+   number of perturbations, at equal compute with the gradient and policy-gradient
+   steering, would show how the method scales.
+3. **Instrument design.** Gaussian noise is convenient, but probably not the best
+   instrument. Isotropic noise pushes the activations away from the region they normally
+   occupy, so the estimated effect may not reflect the model's behaviour on real inputs.
+   Any noise drawn independently of the input remains a valid instrument (in the
+   bilinear model, 2SLS recovers β̄ for any such noise with full-rank covariance), so
+   there is room to design noise that keeps the perturbed activations closer to their
+   natural distribution, for example by preserving the norm of h_T or by resampling
+   deviations from other inputs' activations. This has to be balanced against the rank
+   condition: by result 4, noise that only follows the natural variation of h_T may be a
+   weak instrument in exactly the directions the model is sensitive to. Noise restricted
+   to the principal subspace of the data would test this.
 
 ## Scripts
 
@@ -332,14 +346,17 @@ the code since that run).
   *EMNLP*. [arXiv:1808.09031](https://arxiv.org/abs/1808.09031)
 - Nesterov, Y. and Spokoiny, V. (2017). Random gradient-free minimization of convex
   functions. *Foundations of Computational Mathematics*, 17, 527–566.
-- Park, K., Nief, T., Choe, Y. J. and Veitch, V. (2026). The information geometry of
-  softmax: Probing and steering. *ICML*. [arXiv:2602.15293](https://arxiv.org/abs/2602.15293)
+- Poupart, Y., Beynier, A. and Maudet, N. (2026). Policy gradient steering: Interventions
+  from behavioral objectives. [arXiv:2607.27574](https://arxiv.org/abs/2607.27574)
 - Rimsky, N., Gabrieli, N., Schulz, J., Tong, M., Hubinger, E. and Turner, A. M. (2024).
   Steering Llama 2 via contrastive activation addition. *ACL*.
   [arXiv:2312.06681](https://arxiv.org/abs/2312.06681)
 - Salimans, T., Ho, J., Chen, X., Sidor, S. and Sutskever, I. (2017). Evolution
   strategies as a scalable alternative to reinforcement learning.
   [arXiv:1703.03864](https://arxiv.org/abs/1703.03864)
+- Sinii, V., Balagansky, N., Gerasimov, G., et al. (2025). Small vectors, big effects: A
+  mechanistic study of RL-induced reasoning via steering vectors.
+  [arXiv:2509.06608](https://arxiv.org/abs/2509.06608)
 - Stein, C. M. (1981). Estimation of the mean of a multivariate normal distribution.
   *Annals of Statistics*, 9(6), 1135–1151.
 - Turner, A. M., Thiergart, L., Leech, G., Udell, D., Vazquez, J. J., Mini, U. and
