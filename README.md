@@ -264,8 +264,8 @@ reasonable share of answers (here 10–30%).
    perturbations are needed as d grows.
 3. Is Gaussian noise the right instrument? Isotropic noise pushes the activations off
    their natural distribution. Any noise independent of the input is still valid, so
-   could try noise that stays closer to it (e.g. norm-preserving, or resampled from other
-   inputs' activations), while keeping enough variation in the directions the model is
+   could try noise that stays closer to it (e.g. resampled from the activations of other
+   inputs, possibly from general text rather than the task), while keeping enough variation in the directions the model is
    sensitive to.
 
 ## Scripts
