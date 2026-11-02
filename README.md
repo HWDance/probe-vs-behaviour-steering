@@ -2,39 +2,44 @@
 
 Activation steering changes a language model's behaviour by adding a vector to its
 hidden activations at inference time. Methods for finding steering vectors broadly fall
-into two camps, which have complementary weaknesses.
+into two types.
 
-*Observational* methods fit a direction to activations collected from prompts labelled
-by a concept, either as a linear probe that predicts the concept or as a difference of
-class means (Turner et al., 2023; Rimsky et al., 2024; Li et al., 2023). These methods
-are simple: they need only forward passes and a regression, with no gradients or
-optimisation through the model. However, a direction that detects a concept well need
-not steer the model well. On AxBench (Wu et al., 2025), linear probes rank second of
-twelve methods at concept detection (AUROC 0.940), but eleventh at steering, with less
-than half the score of a difference of means. Li et al. (2023) and Marks and Tegmark
-(2024) also find that steering along a probe's weight vector is less effective than
-steering along the difference of class means.
+1. **Observational methods** model the relationship between a concept of the input,
+   Z = f(X), and the activations H. Examples are the difference of class means
+   E[H | Z = 1] − E[H | Z = 0] and linear probes that predict Z from H (Turner et al.,
+   2023; Rimsky et al., 2024; Li et al., 2023).
+2. **Interventional methods** model the effect of the activations H on the model's
+   behaviour B. They learn an intervention on H by backpropagating through the model, so
+   that the behaviour under the intervention matches a target. Examples are distributed
+   alignment search (DAS; Geiger et al., 2024; Wu et al., 2023) and its steering variant
+   CDAS (Bao et al., 2026), representation finetuning (Wu et al., 2024), and steering
+   vectors trained by preference optimisation (Cao et al., 2024).
 
-*Interventional* methods instead learn the intervention itself, by backpropagating
-through the model so that its output under the intervention matches a target. Examples
-include distributed alignment search (DAS; Geiger et al., 2024; Wu et al., 2023) and its
-steering variant CDAS (Bao et al., 2026), representation finetuning (Wu et al., 2024),
-and steering vectors trained by preference optimisation (Cao et al., 2024). Because they
-act on the model directly, these methods target the causal effect of the activations on
-behaviour. However, they require gradient-based optimisation with its own
-hyperparameters, often paired counterfactual prompts, and a differentiable objective.
-The last requirement rules them out when behaviour is scored by a judge model, read from
-sampled text, or observed only as a binary outcome.
+Each type has its own weaknesses:
+
+- *Observational methods* are simple, needing only forward passes and a regression, but
+  a direction that detects a concept well need not steer the model well. On AxBench (Wu
+  et al., 2025), linear probes rank second of twelve methods at concept detection (AUROC
+  0.940) but eleventh at steering, with less than half the score of a difference of
+  means. Li et al. (2023) and Marks and Tegmark (2024) also find that probe weight
+  vectors steer less well than mean differences.
+- *Interventional methods* target the causal effect of H on B directly, but require
+  gradient-based optimisation with its own hyperparameters, often paired counterfactual
+  prompts, and a differentiable objective. The last requirement rules them out when
+  behaviour is scored by a judge model, read from sampled text, or observed only as a
+  binary outcome.
+
+## A simple identification strategy via instrumental variables
 
 We conjecture that probes steer poorly for two reasons. First, they are usually fit to a
 concept defined by the input (such as the correct answer), rather than to the model's
-behaviour (the answer it actually gives). Second, a probe fit to behaviour on
-observational activations is an observational estimate of the activations' effect on
-that behaviour, and so is confounded by the input and by activations at earlier token
-positions.
+behaviour (the answer it actually gives). Second, even a probe fit to behaviour
+estimates the effect of H on B from observational data, and so is confounded by the
+input and by activations at earlier token positions.
 
-Motivated by this, we propose a simple way to obtain causal probes. We add Gaussian
-noise to the activations and use the noise as an instrumental variable. The noise is
+Motivated by this, we propose a simple way to identify the effect of H on B that keeps
+the simplicity of a probe. We add Gaussian noise to the activations and use the noise as
+an instrumental variable. The noise is
 independent of the input by construction and moves the activations in every direction,
 so it is a valid instrument, and two-stage least squares (2SLS) reduces to regressing
 behaviour on the noise. Like a probe, the method needs only forward passes and a
