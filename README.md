@@ -123,7 +123,7 @@ At the last layer, Y depends only on h_T and the second path is absent.
 Write h = (h_T, h_(<T)) for the activations at layer ℓ, and suppose behaviour is
 bilinear in the activations and a vector of context features c(X),
 
-$$B = c(X)^\top A h + \varepsilon = c(X)^\top A_T h_T + c(X)^\top A_{<T} h_{<T} + \varepsilon.$$
+$$B = c(X)^\top A h + \varepsilon = c(X)^\top A_T h_T + c(X)^\top A_{\lt T} h_{\lt T} + \varepsilon.$$
 
 This is the simplest model in which the context interacts with the activations to
 produce behaviour. It is more realistic for a transformer than a model that is additive
@@ -139,7 +139,7 @@ $$\bar\beta = \mathbb{E}[\beta(X)] = \mathbb{E}[\partial B/\partial h_T],$$
 which is the average gradient we use as a reference below. A probe regressing B on h_T
 estimates
 
-$$\hat\beta_{\text{probe}} = \bar\beta + \Sigma_T^{-1}\mathrm{Cov}\big(h_T,\ (\beta(X) - \bar\beta)^\top h_T + c(X)^\top A_{<T} h_{<T}\big).$$
+$$\hat\beta_{\text{probe}} = \bar\beta + \Sigma_T^{-1}\mathrm{Cov}\big(h_T,\ (\beta(X) - \bar\beta)^\top h_T + c(X)^\top A_{\lt T} h_{\lt T}\big).$$
 
 The second term is the confounding bias, which has two parts. The first comes from
 effect heterogeneity: the effect of h_T varies with the input, and since both depend on
