@@ -257,28 +257,16 @@ reasonable share of answers (here 10–30%).
 
 ## Next steps
 
-We see three main directions.
-
-1. **Non-differentiable behaviour.** The method is aimed at behaviour observed only as an
-   indicator (e.g. whether a generated answer is correct) or scored by a judge model.
-   The binary results above are a first step. Natural baselines are probes fit to the
-   same labels and policy-gradient steering (Poupart et al., 2026).
-2. **Larger models.** The regression has d unknowns, so the number of perturbations
-   needed grows with model width. The runs above use about 6,400 prompts with 4
-   antithetic pairs each, for d = 512. A learning curve of steering quality against the
-   number of perturbations, at equal compute with the gradient and policy-gradient
-   steering, would show how the method scales.
-3. **Instrument design.** Gaussian noise is convenient, but probably not the best
-   instrument. Isotropic noise pushes the activations away from the region they normally
-   occupy, so the estimated effect may not reflect the model's behaviour on real inputs.
-   Any noise drawn independently of the input remains a valid instrument (in the
-   bilinear model, 2SLS recovers β̄ for any such noise with full-rank covariance), so
-   there is room to design noise that keeps the perturbed activations closer to their
-   natural distribution, for example by preserving the norm of h_T or by resampling
-   deviations from other inputs' activations. This has to be balanced against the rank
-   condition: by result 4, noise that only follows the natural variation of h_T may be a
-   weak instrument in exactly the directions the model is sensitive to. Noise restricted
-   to the principal subspace of the data would test this.
+1. Extend to non-differentiable behaviours such as indicators and judge scores, and
+   compare with probes fit to the same labels and with policy-gradient steering (Poupart
+   et al., 2026).
+2. Implement on larger models (e.g. AxBench replications), and check how many
+   perturbations are needed as d grows.
+3. Is Gaussian noise the right instrument? Isotropic noise pushes the activations off
+   their natural distribution. Any noise independent of the input is still valid, so
+   could try noise that stays closer to it (e.g. norm-preserving, or resampled from other
+   inputs' activations), while keeping enough variation in the directions the model is
+   sensitive to.
 
 ## Scripts
 
