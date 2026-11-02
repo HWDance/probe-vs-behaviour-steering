@@ -118,27 +118,51 @@ the association between h_T and its label, which also includes backdoor paths:
 
 At the last layer, Y depends only on h_T and the second path is absent.
 
-### Linear model
+### A bilinear model of behaviour
 
-Suppose B = βᵀh_T + γᵀh_(<T) + c(X) + ε. A probe regressing B on h_T estimates
+Write h = (h_T, h_(<T)) for the activations at layer ℓ, and suppose behaviour is
+bilinear in the activations and a vector of context features c(X),
 
-$$\hat\beta_{\text{probe}} = \beta + \Sigma_T^{-1}\mathrm{Cov}\big(h_T,\ \gamma^\top h_{<T} + c(X)\big).$$
+$$B = c(X)^\top A h + \varepsilon = c(X)^\top A_T h_T + c(X)^\top A_{<T} h_{<T} + \varepsilon.$$
 
-The second term is the confounding bias. Along an eigendirection of Σ_T with variance λ,
-it can be as large as √(Var(confounder)/λ), so it is largest in directions where h_T
-barely varies across inputs. With regularisation, these directions are instead shrunk
-towards zero. In either case, the probe cannot recover β in directions where the data do
-not vary.
+This is the simplest model in which the context interacts with the activations to
+produce behaviour. It is more realistic for a transformer than a model that is additive
+in h_T and h_(<T), since attention makes the way later layers read h_T depend on the
+earlier positions. At layer ℓ the input affects B only through h, so c(X) can be read as the context that
+later layers compute from the earlier positions (when B is judged with X, it also
+includes the judge's direct dependence on X). Under this model the effect of h_T on B
+varies with the input, β(X) = A_Tᵀc(X). A single steering vector targets the average
+effect
+
+$$\bar\beta = \mathbb{E}[\beta(X)] = \mathbb{E}[\partial B/\partial h_T],$$
+
+which is the average gradient we use as a reference below. A probe regressing B on h_T
+estimates
+
+$$\hat\beta_{\text{probe}} = \bar\beta + \Sigma_T^{-1}\mathrm{Cov}\big(h_T,\ (\beta(X) - \bar\beta)^\top h_T + c(X)^\top A_{<T} h_{<T}\big).$$
+
+The second term is the confounding bias, which has two parts. The first comes from
+effect heterogeneity: the effect of h_T varies with the input, and since both depend on
+X, this variation is correlated with h_T itself. This is the correlated random
+coefficient model from econometrics (Heckman and Vytlacil, 1998). The second part is the
+path through earlier positions. Along an eigendirection of Σ_T with variance λ, the bias
+can be as large as √(Var(U)/λ), where U is the second argument of the covariance, so it
+is largest in directions where h_T barely varies across inputs. With regularisation,
+these directions are instead shrunk towards zero. In either case, the probe cannot
+recover β̄ in directions where the data do not vary.
 
 An instrument removes this bias if it is independent of the confounders (exogeneity)
 and moves h_T in every direction (rank). Adding noise δ ~ N(0, s²I) to h_T satisfies
-both: δ is independent of X, h_(<T) and ε by construction, and it is full rank. The
-first stage of 2SLS is then the identity, so
+both: δ is independent of X, h and ε by construction, and it is full rank. The first
+stage of 2SLS is then the identity, so
 
-$$\hat\beta_{\text{IV}} = \Sigma_\delta^{-1}\mathrm{Cov}(\delta, B) = \beta.$$
+$$\hat\beta_{\text{IV}} = \Sigma_\delta^{-1}\mathrm{Cov}(\delta, B) = \Sigma_\delta^{-1}\mathbb{E}\big[\delta\delta^\top\beta(X)\big] = \bar\beta,$$
 
-Outside the linear model, Stein's lemma shows that the same regression estimates the
-gradient of B averaged over the noise, so s trades off locality against signal. If only
+where B is now measured with the noise added. Because δ is also independent of the
+coefficients β(X), 2SLS recovers their average (cf. Wooldridge, 1997).
+
+Outside this model, Stein's lemma shows that the same regression estimates the gradient
+of B averaged over the noise and the inputs, so s trades off locality against signal. If only
 the binary answer 1[B > 0] is observed, the regression is a linear probability model,
 and only perturbations that flip the answer carry information.
 
@@ -292,6 +316,10 @@ the code since that run).
 - Geiger, A., Wu, Z., Potts, C., Icard, T. and Goodman, N. (2024). Finding alignments
   between interpretable causal variables and distributed neural representations.
   *CLeaR*. [arXiv:2303.02536](https://arxiv.org/abs/2303.02536)
+- Heckman, J. J. and Vytlacil, E. (1998). Instrumental variables methods for the
+  correlated random coefficient model: Estimating the average rate of return to
+  schooling when the return is correlated with schooling. *Journal of Human Resources*,
+  33(4), 974–987.
 - Li, K., Patel, O., Viégas, F., Pfister, H. and Wattenberg, M. (2023). Inference-time
   intervention: Eliciting truthful answers from a language model. *NeurIPS*.
   [arXiv:2306.03341](https://arxiv.org/abs/2306.03341)
@@ -317,6 +345,8 @@ the code since that run).
 - Turner, A. M., Thiergart, L., Leech, G., Udell, D., Vazquez, J. J., Mini, U. and
   MacDiarmid, M. (2023). Steering language models with activation engineering.
   [arXiv:2308.10248](https://arxiv.org/abs/2308.10248)
+- Wooldridge, J. M. (1997). On two stage least squares estimation of the average
+  treatment effect in a random coefficient model. *Economics Letters*, 56(2), 129–133.
 - Wu, Z., Arora, A., Geiger, A., Wang, Z., Huang, J., Jurafsky, D., Manning, C. D. and
   Potts, C. (2025). AxBench: Steering LLMs? Even simple baselines outperform sparse
   autoencoders. *ICML*. [arXiv:2501.17148](https://arxiv.org/abs/2501.17148)
