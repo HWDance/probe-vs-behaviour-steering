@@ -7,7 +7,7 @@ into two types.
 1. **Observational methods** model the relationship between a concept of the input,
    Z = f(X), and the activations H. Examples are the difference of class means
    E[H | Z = 1] − E[H | Z = 0] and linear probes that predict Z from H (Turner et al.,
-   2023; Rimsky et al., 2024; Li et al., 2023).
+   2023; Panickssery et al., 2023; Li et al., 2023).
 2. **Interventional methods** model the effect of the activations H on the model's
    behaviour B. They learn an intervention on H by backpropagating through the model, so
    that the behaviour under the intervention matches a target. Examples are distributed
@@ -334,11 +334,11 @@ the code since that run).
   *EMNLP*. [arXiv:1808.09031](https://arxiv.org/abs/1808.09031)
 - Nesterov, Y. and Spokoiny, V. (2017). Random gradient-free minimization of convex
   functions. *Foundations of Computational Mathematics*, 17, 527–566.
+- Panickssery, N., Gabrieli, N., Schulz, J., Tong, M., Hubinger, E. and Turner, A. M.
+  (2023). Steering Llama 2 via contrastive activation addition.
+  [arXiv:2312.06681](https://arxiv.org/abs/2312.06681)
 - Poupart, Y., Beynier, A. and Maudet, N. (2026). Policy gradient steering: Interventions
   from behavioral objectives. [arXiv:2607.27574](https://arxiv.org/abs/2607.27574)
-- Rimsky, N., Gabrieli, N., Schulz, J., Tong, M., Hubinger, E. and Turner, A. M. (2024).
-  Steering Llama 2 via contrastive activation addition. *ACL*.
-  [arXiv:2312.06681](https://arxiv.org/abs/2312.06681)
 - Salimans, T., Ho, J., Chen, X., Sidor, S. and Sutskever, I. (2017). Evolution
   strategies as a scalable alternative to reinforcement learning.
   [arXiv:1703.03864](https://arxiv.org/abs/1703.03864)
