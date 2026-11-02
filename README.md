@@ -122,7 +122,7 @@ At the last layer, Y depends only on h_T and the second path is absent.
 
 Suppose B = βᵀh_T + γᵀh_(<T) + c(X) + ε. A probe regressing B on h_T estimates
 
-$$\hat\beta_{\text{probe}} = \beta + \Sigma_T^{-1}\,\mathrm{Cov}\big(h_T,\ \gamma^\top h_{<T} + c(X)\big).$$
+$$\hat\beta_{\text{probe}} = \beta + \Sigma_T^{-1}\mathrm{Cov}\big(h_T,\ \gamma^\top h_{<T} + c(X)\big).$$
 
 The second term is the confounding bias. Along an eigendirection of Σ_T with variance λ,
 it can be as large as √(Var(confounder)/λ), so it is largest in directions where h_T
@@ -135,7 +135,7 @@ and moves h_T in every direction (rank). Adding noise δ ~ N(0, s²I) to h_T sat
 both: δ is independent of X, h_(<T) and ε by construction, and it is full rank. The
 first stage of 2SLS is then the identity, so
 
-$$\hat\beta_{\text{IV}} = \Sigma_\delta^{-1}\,\mathrm{Cov}(\delta, B) = \beta.$$
+$$\hat\beta_{\text{IV}} = \Sigma_\delta^{-1}\mathrm{Cov}(\delta, B) = \beta.$$
 
 Outside the linear model, Stein's lemma shows that the same regression estimates the
 gradient of B averaged over the noise, so s trades off locality against signal. If only
