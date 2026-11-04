@@ -1,5 +1,5 @@
-torch
-transformers
-scikit-learn
-pandas
-numpy
+torch==2.15.0
+transformers==5.22.0
+scikit-learn==1.9.1
+pandas==3.1.0
+numpy==2.5.4

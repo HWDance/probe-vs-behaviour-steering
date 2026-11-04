@@ -33,18 +33,25 @@ from lm import perturbed_behaviour
 
 
 def noise_iv(model, tokenizer, prompts, layer, sigma, scale, n_draws, seed):
-    """Regress the antithetic change in behaviour on random perturbations of h_T.
-
-    Returns {readout: (estimate, split-half cosine)} for the continuous and binary
-    readouts, both fit to the same perturbations, and the fraction of perturbation
-    pairs whose answers differ.
-    """
+    """Regress the antithetic change in behaviour on random perturbations of h_T."""
     d = model.config.hidden_size
     delta = np.random.default_rng(seed).standard_normal((len(prompts), n_draws, d)) * sigma * scale / np.sqrt(d)
-    delta_t = torch.tensor(delta, dtype=torch.float32)
-    B = perturbed_behaviour(model, tokenizer, prompts, layer, torch.cat([delta_t, -delta_t], dim=1))
+    return antithetic_iv(model, tokenizer, prompts, layer, np.zeros((len(prompts), d)), delta)
+
+
+def antithetic_iv(model, tokenizer, prompts, layer, shift, noise):
+    """Regress the antithetic change in behaviour on the noise.
+
+    h_T is replaced by h_T + shift ± noise, with shift (n, d) fixed per item and noise
+    (n, K, d) independent of the items. Returns {readout: (estimate, split-half cosine)}
+    for the continuous and binary readouts, both fit to the same perturbations, and the
+    fraction of perturbation pairs whose answers differ.
+    """
+    n_draws, d = noise.shape[1:]
+    deltas = np.concatenate([shift[:, None] + noise, shift[:, None] - noise], axis=1)
+    B = perturbed_behaviour(model, tokenizer, prompts, layer, torch.tensor(deltas, dtype=torch.float32))
     B_plus, B_minus = B[:, :n_draws], B[:, n_draws:]
-    X = delta.reshape(-1, d)
+    X = noise.reshape(-1, d)
     readouts = {
         "cont": (B_plus - B_minus).ravel() / 2,
         "sign": ((B_plus > 0).astype(float) - (B_minus > 0)).ravel() / 2,

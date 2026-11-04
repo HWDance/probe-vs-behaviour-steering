@@ -46,7 +46,12 @@ Motivated by this, we propose identifying the effect of H on B with an instrumen
 variable. We add Gaussian noise to the activations and use the noise as the instrument.
 The noise is independent of the input by construction and moves the activations in
 every direction, which addresses both confounding and lack of overlap, and two-stage
-least squares (2SLS) reduces to regressing behaviour on the noise. Like a probe, this
+least squares (2SLS) reduces to regressing behaviour on the noise. Fully randomising the
+activations, or patching in activations from other inputs (Heimersheim and Nanda, 2024),
+would also give a valid instrument. However, these designs differ in how strong an
+instrument they are and in how far from the model's natural activations they measure the
+effect, so we treat the choice of intervention as a design problem (see "Choice of
+intervention" and result 7 below). Like a probe, this
 only needs samples of behaviour and a linear regression, with no gradients or
 optimisation, and it applies to any measure of behaviour, including binary outcomes. In
 initial experiments on one task in Pythia-70m (Biderman et al., 2023), the resulting
@@ -169,6 +174,30 @@ noise and the inputs, so s trades off locality against signal. If only the binar
 1[B > 0] is observed, the regression is a linear probability model, and only
 perturbations that flip the answer carry information.
 
+### Choice of intervention
+
+Any intervention that sets h_T using randomness independent of the input gives a valid
+instrument, including overwriting h_T entirely. The designs differ in where the effect
+is measured and in how informative they are. With ξ Gaussian noise scaled to the natural
+spread of h_T, and μ the mean of h_T:
+
+- *Additive noise*, h_T + sξ, measures the effect near the activations the model actually
+  produces, but for large s it also inflates the scale of h_T.
+- *Variance-preserving noise*, μ + (h_T − μ + sξ)/√(1 + s²), keeps the mean and variance
+  of h_T fixed, and removes information about the original activation as s grows. Lee and
+  Heimersheim (2024) make a related point about perturbation baselines, where part of the
+  effect of perturbing towards another activation came from removing the original one.
+- *Overwriting*, μ + ξ, is the limit s → ∞: a fully randomised experiment, but one that
+  evaluates the model on activations unrelated to the context.
+- *Patching* with the activations of other inputs, h_T(X′) (Heimersheim and Nanda, 2024),
+  keeps h_T realistic, but only varies it in directions where real activations vary, so
+  it should inherit the lack of overlap described above.
+
+Small or realistic perturbations give a weak instrument in the directions the model is
+sensitive to, while large ones measure the effect far from the activations the model
+produces. Our general aim is to find the intervention structure that best balances the
+two.
+
 ## Initial results
 
 ### Evaluation
@@ -255,6 +284,31 @@ At matched off-target KL (≈ 0.3), the binary noise IV flips 53% of answers, co
 the same pattern. With a binary outcome, the noise needs to be large enough to flip a
 reasonable share of answers (here 10–30%).
 
+**7. Separating scale from information.** Large additive noise also inflates the scale of
+h_T. To separate the two, we compare additive and variance-preserving noise at the same
+signal-to-noise ratio, with s in units of the natural spread of h_T (`vp_iv.py`). Layer
+4, with flip rates on correct items at matched off-target KL (0.2):
+
+| Design | cos with gradient | answers flipped by the noise | flips, continuous B | flips, binary answer |
+|---|---|---|---|---|
+| average gradient | 1.00 | | 0.51 | |
+| additive, s=1 | 0.93 | 11% | 0.68 | 0.38 |
+| additive, s=4 | 0.60 | 48% | 0.60 | 0.57 |
+| variance-preserving, s=1 | 0.96 | 6% | 0.44 | 0.14 |
+| variance-preserving, s=4 | 0.95 | 8% | 0.40 | 0.15 |
+| overwrite | 0.95 | 7% | 0.39 | 0.16 |
+
+With the scale held fixed, every design recovers the local gradient direction (cosine
+0.92–0.98 at layers 3–5, including a full overwrite), so the drift under large additive
+noise comes from scale rather than from removing information about the original
+activation. However, recovering the local gradient is not the same as steering well: at
+layer 4, moderate additive noise steers better than both the gradient and the
+variance-preserving estimates. One explanation is that steering is itself an additive
+push that changes the scale of h_T, so an estimate measured under additive noise matches
+how it is used. For the binary answer, variance-preserving noise is a weak instrument
+(even a full overwrite flips only 5–11% of answer pairs), and large additive noise works
+best. Layers 3 and 5 show smaller differences (`results/compare/matched_kl_vp.csv`).
+
 ## Next steps
 
 1. Extend to non-differentiable behaviours such as indicators and judge scores, and
@@ -262,11 +316,12 @@ reasonable share of answers (here 10–30%).
    et al., 2026).
 2. Implement on larger models (e.g. AxBench replications), and check how many
    perturbations are needed as d grows.
-3. Is Gaussian noise the right instrument? Isotropic noise pushes the activations off
-   their natural distribution. Any noise independent of the input is still valid, so
-   could try noise that stays closer to it (e.g. resampled from the activations of other
-   inputs, possibly from general text rather than the task), while keeping enough variation in the directions the model is
-   sensitive to.
+3. Find the right intervention structure. Result 7 suggests the best design depends on
+   the readout (binary answers need a strong instrument) and on how the direction will be
+   used (additive steering may favour additive noise); could test this by steering with
+   norm-preserving pushes. Could also try noise closer to the natural distribution of
+   activations (e.g. resampled from other inputs, possibly from general text), while
+   keeping enough variation in the directions the model is sensitive to.
 
 ## Scripts
 
@@ -278,32 +333,30 @@ reasonable share of answers (here 10–30%).
 | `compare.py` | observational directions (probes, mean differences) and the gradient; geometry and steering |
 | `iv.py` | verb-instrumented 2SLS and its diagnostics |
 | `steer_iv.py` | verb IV and noise IV (continuous and binary), steering compared with `compare.py` |
+| `vp_iv.py` | additive vs variance-preserving noise IV and overwrite, steering at matched off-target KL |
 
 ## Running
 
 ```
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt  # tested with Python 3.12
 
 # pilot
-.venv\Scripts\python stimuli.py
-.venv\Scripts\python pilot.py
+python stimuli.py
+python pilot.py
 
 # main comparison (Pythia-70m, relative-clause frame, 8000 prompts)
-.venv\Scripts\python stimuli.py --frames orc --n-per-cell 2000 --out results/compare/stimuli.csv
-.venv\Scripts\python compare.py
-.venv\Scripts\python iv.py
-.venv\Scripts\python steer_iv.py
+python stimuli.py --frames orc --n-per-cell 2000 --out results/compare/stimuli.csv
+python compare.py
+python iv.py
+python steer_iv.py
+python vp_iv.py
 ```
 
-Everything runs on a laptop CPU. `compare.py` takes about 40 minutes and `steer_iv.py`
-about 20.
-
-`results/compare/steering_cont.csv` comes from an earlier version of `steer_iv.py`
-(continuous noise IV with s in {0.01, 0.1, 0.4} and 2 draws per item);
-`steering_binary.csv` is from the current version. In `results/compare/geometry.csv`
-the `test_acc_*` columns hold negative held-out log-loss rather than accuracy (fixed in
-the code since that run).
+Everything runs on a laptop CPU. `compare.py` takes about 40 minutes, `steer_iv.py`
+about 20 and `vp_iv.py` about 90. In `results/compare/geometry.csv` the `test_acc_*` columns hold negative
+held-out log-loss rather than accuracy (fixed in the code since that run).
 
 ## References
 
@@ -322,6 +375,11 @@ the code since that run).
   correlated random coefficient model: Estimating the average rate of return to
   schooling when the return is correlated with schooling. *Journal of Human Resources*,
   33(4), 974–987.
+- Heimersheim, S. and Nanda, N. (2024). How to use and interpret activation patching.
+  [arXiv:2404.15255](https://arxiv.org/abs/2404.15255)
+- Lee, D. J. and Heimersheim, S. (2024). Investigating sensitive directions in GPT-2: An
+  improved baseline and comparative analysis of SAEs.
+  [arXiv:2410.12555](https://arxiv.org/abs/2410.12555)
 - Li, K., Patel, O., Viégas, F., Pfister, H. and Wattenberg, M. (2023). Inference-time
   intervention: Eliciting truthful answers from a language model. *NeurIPS*.
   [arXiv:2306.03341](https://arxiv.org/abs/2306.03341)
